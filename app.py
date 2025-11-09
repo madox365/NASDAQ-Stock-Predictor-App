@@ -18,14 +18,26 @@ st.set_page_config(
 )
 
 # Inicializar predictor (se carga una sola vez)
+# app.py
+
 @st.cache_resource
 def load_predictor():
-    return StockPredictor(
-        model_path=config.MODEL_PATH,
-        feature_scaler_path=config.FEATURE_SCALER_PATH,
-        target_scaler_path=config.TARGET_SCALER_PATH,
-        lookback=config.LOOKBACK_WINDOW
-    )
+    try:
+        print("Iniciando carga del predictor...")
+        predictor = StockPredictor(
+            model_path=config.MODEL_PATH,
+            feature_scaler_path=config.FEATURE_SCALER_PATH,
+            target_scaler_path=config.TARGET_SCALER_PATH,
+            lookback=config.LOOKBACK_WINDOW
+        )
+        print("Predictor cargado exitosamente")
+        return predictor
+    except Exception as e:
+        st.error(f"Error cargando el modelo: {e}")
+        print(f"ERROR en load_predictor: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def plot_predictions(df, predictions, ticker):
     """Crea gráfico interactivo con Plotly"""
@@ -117,24 +129,27 @@ def main():
     # Área principal
     if predict_button:
         with st.spinner(f"Cargando datos de {ticker}..."):
-            # Obtener datos
             df = fetch_stock_data(ticker, period=period)
-            
             if df is None or len(df) == 0:
-                st.error(f"❌ No se pudieron obtener datos para {ticker}")
+                st.error(f"No se pudieron obtener datos para {ticker}")
+                st.info("Prueba con otro ticker o más tarde.")
                 return
-            
-            st.success(f"✅ Datos cargados: {len(df)} días")
-        
-        with st.spinner("Realizando predicción..."):
-            # Cargar predictor
+            st.success(f"Datos cargados: {len(df)} días")
+
+        with st.spinner("Cargando modelo IA..."):
             predictor = load_predictor()
-            
-            # Hacer predicción
-            predictions = predictor.predict(df, horizon=horizon)
-            
-            if predictions is None:
-                st.error("❌ Error en la predicción")
+            if predictor is None:
+                st.error("No se pudo cargar el modelo. Revisa los logs.")
+                return
+
+        with st.spinner("Realizando predicción..."):
+            try:
+                predictions = predictor.predict(df, horizon=horizon)
+                if predictions is None:
+                    st.error("Error en la predicción")
+                    return
+            except Exception as e:
+                st.error(f"Error en predicción: {e}")
                 return
         
         # Mostrar resultados
